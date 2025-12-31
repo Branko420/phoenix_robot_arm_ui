@@ -18,6 +18,8 @@ defmodule RobotArmUiWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+
+    live "/arm", ArmControlLive
   end
 
   # Other scopes may use custom stacks.

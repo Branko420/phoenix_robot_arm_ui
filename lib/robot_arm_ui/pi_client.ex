@@ -6,8 +6,8 @@ defmodule RobotArmUi.PiClient do
     WebSockex.start_link(url, __MODULE__, %{url: url})
   end
 
-  def send_frame(payload) when is_binary(payload) do
-    WebSockex.send_frame(__MODULE__, {:text, payload})
+  def send_frame(pid, payload) when is_binary(payload) do
+    WebSockex.send_frame(pid, {:text, payload})
   end
 
   def handle_frame(_conn, state) do
@@ -22,5 +22,9 @@ defmodule RobotArmUi.PiClient do
   def handle_disconnect(conn, state) do
     Logger.info("PiClient: Disconnected from Raspberry. Reason: #{inspect(conn.reason)}")
     {:ok, state}
+  end
+
+  def send_json(pid, payload) do
+    WebSockex.send_frame(pid, {:text, Jason.encode!(payload)})
   end
 end

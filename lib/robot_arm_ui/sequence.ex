@@ -4,6 +4,7 @@ defmodule RobotArmUi.Sequence do
 
   schema "sequences" do
     field :name, :string
+    has_many :movements, RobotArmUi.Movement
 
     timestamps(type: :utc_datetime)
   end

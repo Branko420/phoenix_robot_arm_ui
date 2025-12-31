@@ -3,13 +3,13 @@ defmodule RobotArmUi.SequencePlayer do
   alias RobotArmUi.PiClient
   import Ecto.Query
 
-  def play_sequence(sequence_id) do
-    movements =
-      RobotArmUi.Movement
-      |> where(sequence_id: ^sequence_id)
-      |> order_by(:inserted_at)
-      |> Repo.all()
-    Enum.each(movements, fn movement ->
+  def play_sequence(sequence_id, arm_pid) do
+    sequence =
+      RobotArmUi.Sequence
+      |> Repo.get!(sequence_id)
+      |> Repo.preload([movements: from(m in RobotArmUi.Movement, order_by: m.inserted_at)])
+
+    Enum.each(sequence.movements, fn movement ->
       pose = %{
         "duration" => movement.duration || 1.5,
         "joints" => %{
@@ -21,7 +21,7 @@ defmodule RobotArmUi.SequencePlayer do
           "gripper" => movement.joint1
         }
       }
-      PiClient.send_frame(Jason.encode!(pose))
+      if arm_pid, do: PiClient.send_frame(arm_pid, Jason.encode!(pose))
 
       delay = movement.delay_ms || 2000
       Process.sleep(delay)

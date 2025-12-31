@@ -1,0 +1,155 @@
+<div class="min-h-screen bg-slate-950 text-slate-200 font-sans relative overflow-x-hidden">
+
+  <%!-- ========================================================
+       STEP 1: WELCOME / INITIALIZE SCREEN
+       ======================================================== --%>
+  <%= if is_nil(@connected_ip) do %>
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-6">
+      <div class="w-full max-w-md text-center space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        
+        <div class="space-y-2">
+          <h1 class="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase italic">
+            <%= if @is_admin, do: "Admin Access", else: "Initialize" %>
+          </h1>
+          <p class="text-slate-500 font-medium h-6 text-sm">
+            <%= if @is_admin, do: "Permissions granted. Ready for hardware link.", else: "Enter Pi IP or 'admin' to manage data." %>
+          </p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 p-6 md:p-8 rounded-[2.5rem] shadow-2xl space-y-6">
+          <form phx-change="update_ip_input" phx-submit="connect_to_arm" class="space-y-6">
+            <div class="relative">
+              <input type="text" name="ip" value={@ip_input} placeholder="0.0.0.0" autocomplete="off"
+                     class="w-full bg-slate-950 border border-slate-700 rounded-2xl p-5 text-center text-2xl md:text-3xl font-mono text-emerald-400 placeholder-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" />
+              
+              <%= if @is_admin do %>
+                <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-slate-950 text-[10px] px-3 py-1 rounded-full font-black tracking-widest uppercase shadow-lg shadow-emerald-500/40">
+                  Authenticated
+                </div>
+              <% end %>
+            </div>
+            
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 md:py-5 rounded-2xl font-black text-lg tracking-widest transition-all active:scale-95 shadow-lg shadow-emerald-900/20">
+              ESTABLISH LINK
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <%!-- ========================================================
+       STEP 2: MISSION CONTROL DASHBOARD
+       ======================================================== --%>
+  <%= if @connected_ip do %>
+    <header class="sticky top-0 z-40 p-3 md:p-4 flex justify-between items-center border-b border-slate-900 bg-slate-900/80 backdrop-blur-md">
+      <div class="flex items-center gap-2 md:gap-4">
+        <div class="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 flex items-center gap-2 md:gap-3">
+          <div class={"w-2 h-2 rounded-full shadow-[0_0_8px] #{if @arm_pid, do: "bg-emerald-500 shadow-emerald-500 animate-pulse", else: "bg-blue-500 shadow-blue-500"}"}></div>
+          <span class="text-[10px] md:text-xs font-mono text-slate-500 uppercase hidden sm:inline">Active IP:</span>
+          <span class="text-xs md:text-sm font-mono text-emerald-400 font-bold"><%= @connected_ip %></span>
+        </div>
+        
+        <div class="flex items-center gap-1 md:gap-2 bg-slate-800 px-2 md:px-3 py-1 rounded-lg border border-slate-700">
+          <input type="number" value={@duration} phx-change="update_duration" 
+                 class="bg-transparent text-blue-400 font-mono text-xs md:text-sm w-12 md:w-16 outline-none text-center" />
+          <span class="text-[8px] md:text-[10px] text-slate-500 font-bold">MS</span>
+        </div>
+      </div>
+
+      <div class="flex gap-2 md:gap-4 items-center">
+        <%= if @is_admin do %>
+          <button phx-click="open_save_modal" class="bg-blue-600 hover:bg-blue-500 text-white px-3 md:px-4 py-2 rounded-xl font-bold text-[10px] md:text-xs transition-all">
+            SAVE POSE
+          </button>
+        <% end %>
+        <button phx-click="reset_session" class="text-[9px] md:text-[10px] text-slate-600 hover:text-white font-black tracking-widest uppercase px-2">
+          Exit
+        </button>
+      </div>
+    </header>
+
+    <main class="p-4 md:p-8 max-w-7xl mx-auto space-y-12">
+      
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 md:gap-6">
+        <%= for {joint, angle} <- @joints do %>
+          <div class="bg-slate-900/50 border border-slate-800 p-4 md:p-6 rounded-[2.5rem] flex flex-col items-center gap-4 md:gap-6 shadow-xl group hover:border-slate-700 transition-all">
+            
+            <span class="text-[9px] md:text-[10px] font-black uppercase text-slate-500 tracking-widest group-hover:text-emerald-500 text-center">
+                <%= String.replace(joint, "_", " ") %>
+            </span>
+            
+            <div class="h-44 md:h-64 w-2 bg-slate-950 rounded-full relative border border-slate-800 flex justify-center">
+               <input type="range" min="0" max="180" step="1" 
+                      value={angle} 
+                      phx-change="move" phx-value-joint={joint}
+                      style="writing-mode: bt-lr; -webkit-appearance: slider-vertical;"
+                      class="h-full w-12 absolute cursor-pointer accent-emerald-500 opacity-60 hover:opacity-100 transition-opacity" />
+            </div>
+
+            <div class="relative">
+                <input type="number" min="0" max="180"
+                       value={round(angle)} 
+                       phx-change="move" phx-value-joint={joint} name="value"
+                       class="w-16 md:w-24 bg-slate-950 border border-slate-800 rounded-xl p-2 text-center font-mono text-sm md:text-xl text-emerald-400 outline-none focus:border-emerald-500" />
+                <span class="absolute -right-2 top-0 text-slate-600 text-xs hidden md:block">°</span>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+      <section class="space-y-6">
+        <div class="flex items-center gap-4">
+            <h2 class="text-[10px] font-black text-slate-600 uppercase tracking-[0.3em]">Sequence Library</h2>
+            <div class="h-px flex-1 bg-slate-900"></div>
+        </div>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <%= for seq <- @sequences do %>
+            <div class="bg-slate-900/40 border border-slate-800 p-4 rounded-2xl flex justify-between items-center group hover:bg-slate-900">
+              <div class="flex flex-col truncate pr-4">
+                <span class="font-bold text-slate-300 truncate"><%= seq.name %></span>
+              </div>
+              
+              <div class="flex gap-2 shrink-0">
+                <button phx-click="load_sequence" phx-value-id={seq.id} class="bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white w-9 h-9 flex items-center justify-center rounded-xl transition-all">
+                   ▶
+                </button>
+                <%= if @is_admin do %>
+                  <button phx-click="delete_sequence" phx-value-id={seq.id} data-confirm="Delete?" class="bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white w-9 h-9 flex items-center justify-center rounded-xl transition-all">
+                    ✕
+                  </button>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </section>
+    </main>
+  <% end %>
+
+  <%!-- MODAL: SAVE POSE --%>
+  <%= if @show_save_modal do %>
+    <div class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
+      <div class="bg-slate-900 border border-slate-800 p-8 md:p-10 rounded-[3rem] shadow-2xl max-w-sm w-full space-y-6 animate-in zoom-in duration-300">
+        <div class="text-center space-y-2">
+            <h3 class="text-2xl font-black text-white">Capture State</h3>
+            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Saving to current sequence</p>
+        </div>
+
+        <form phx-submit="confirm_save" class="space-y-6">
+          <input type="text" name="name" placeholder="Pose Name..." autofocus required
+                 class="w-full bg-slate-950 border border-slate-700 rounded-2xl p-4 text-emerald-400 text-center text-lg outline-none focus:ring-2 focus:ring-emerald-500" />
+          
+          <div class="flex gap-4">
+            <button type="button" phx-click="close_save_modal" class="flex-1 text-slate-600 font-bold uppercase text-[10px] tracking-widest">Cancel</button>
+            <button type="submit" class="flex-[2] bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm tracking-widest shadow-lg shadow-emerald-900/20">
+              SAVE POSE
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  <% end %>
+
+</div>

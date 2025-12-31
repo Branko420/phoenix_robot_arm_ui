@@ -10,7 +10,7 @@ defmodule RobotArmUi.Repo.Migrations.CreateMovements do
       add :joint5, :float
       add :joint6, :float
       add :delay_ms, :integer
-      add :sequence_id, references(:sequences, on_delete: :nothing)
+      add :sequence_id, references(:sequences, on_delete: :delete_all)
 
       timestamps(type: :utc_datetime)
     end
