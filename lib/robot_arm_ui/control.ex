@@ -10,6 +10,10 @@ defmodule RobotArmUi.Control do
     |> Repo.insert()
   end
 
-  def delete_sequence(%Sequence{} = sequence), do: Repo.delete(sequence)
+  def delete_sequence(id) do
+    id_int = if is_binary(id), do: String.to_integer(id), else: id
+    sequence = Repo.get!(Sequence, id_int)
+    Repo.delete(sequence)
+  end
 
 end

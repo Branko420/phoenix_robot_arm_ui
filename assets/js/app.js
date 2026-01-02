@@ -35,6 +35,38 @@ window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
 // connect if there are any LiveViews on the page
 liveSocket.connect()
+// Add this to assets/js/app.js
+window.addEventListener("phx:flash_expire", (e) => {
+  setTimeout(() => {
+    // This finds the close button or just clears the flash area
+    const flash = document.querySelector(".phx-flash");
+    if (flash) flash.style.display = "none";
+  }, 5000); // 5 seconds
+});
+
+// Auto-hide any flash message that appears
+window.addEventListener("phx:page-loading-stop", _info => {
+  setTimeout(() => {
+    document.querySelectorAll(".flash-container").forEach(el => {
+       el.classList.add("opacity-0", "transition-opacity", "duration-1000");
+       setTimeout(() => el.remove(), 1000);
+    });
+  }, 3000);
+})
+
+let Hooks = {}
+
+Hooks.JointSync = {
+  updated() {
+    // When the server updates the value, ensure both inputs match
+    let val = this.el.dataset.angle;
+    let slider = this.el.querySelector('input[type="range"]');
+    let number = this.el.querySelector('input[type="number"]');
+    
+    if (slider) slider.value = val;
+    if (number) number.value = val;
+  }
+}
 
 // expose liveSocket on window for web console debug logs and latency simulation:
 // >> liveSocket.enableDebug()
