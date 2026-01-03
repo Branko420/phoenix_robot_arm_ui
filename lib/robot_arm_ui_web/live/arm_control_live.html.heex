@@ -40,7 +40,7 @@
           <%!-- EXECUTE BUTTON (Normal Mode) --%>
           <button phx-click="execute_move" 
                   class="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-3 rounded-2xl font-black text-xs tracking-[0.2em] shadow-lg shadow-emerald-900/40 active:scale-95 transition-all uppercase border border-emerald-500/50">
-            Execute Command
+            Execute Sequence
           </button>
         <% end %>
 
@@ -59,22 +59,15 @@
           {"Base", "base", 0, 180},
           {"Shoulder", "shoulder", 20, 160},
           {"Elbow", "elbow", 10, 170},
-          {"Wrist", "wrist", 0, 180},
-          {"Rotate", "wrist_rotation", 0, 180},
+          {"Wrist", "wrist", 10, 170},
+          {"Wrist Rotate", "wrist_rotation", 0, 180},
           {"Gripper", "gripper", 70, 130}
         ] do %>
         
-        <%!-- 
-            CRITICAL FIX: 
-            1. phx-change="move" is now on the FORM.
-            2. phx-value-joint={key} is now on the FORM.
-            This guarantees 'joint' and 'value' are always sent together.
-        --%>
         <form phx-change="move" phx-value-joint={key} onsubmit="return false" class="bg-slate-900/40 border border-slate-800 p-6 rounded-[3rem] flex flex-col items-center gap-6 shadow-xl hover:border-emerald-500/30 transition-all group">
           <h3 class="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] group-hover:text-emerald-400 transition-colors"><%= name %></h3>
           
           <div class="h-64 w-12 bg-slate-950 rounded-full relative border border-slate-800 flex justify-center shadow-inner overflow-hidden">
-            <%!-- Slider: distinct name --%>
             <input type="range" 
                    name="slider_input"
                    min={min} max={max} step="1" 
@@ -83,13 +76,16 @@
                    style="writing-mode: bt-lr; -webkit-appearance: slider-vertical;" 
                    class={"h-full w-full absolute cursor-pointer opacity-80 " <> (if @editing_id, do: "accent-amber-500", else: "accent-emerald-500")} />
           </div>
-
-          <%!-- Number Box: distinct name --%>
           <input type="number" 
                  name="number_input"
                  value={@joints[key]} 
                  min={min} max={max}
                  phx-debounce="500"
+                 onblur={"
+                   if(this.value > #{max}) this.value = #{max}; 
+                   if(this.value.length >= #{String.length(to_string(min))} && this.value < #{min}) this.value = #{min};
+                   if(this.value < #{min}) this.value = #{min};
+                 "}
                  class={"w-full bg-slate-950 border rounded-2xl p-3 text-center font-mono text-xl outline-none focus:border-opacity-100 transition-colors " <> (if @editing_id, do: "border-amber-500/50 text-amber-400 focus:border-amber-500", else: "border-slate-800 text-emerald-400 focus:border-emerald-500")} />
         </form>
       <% end %>
@@ -100,24 +96,18 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
       <%!-- LEFT COL: SPEED CONTROL --%>
-      <div class={"bg-slate-900/40 border p-8 rounded-[2.5rem] flex flex-col justify-center h-full " <> (if @editing_id, do: "border-amber-500/30", else: "border-slate-800")}>
-        <h3 class="text-xs font-bold uppercase text-slate-500 tracking-widest mb-4">Movement Duration</h3>
+      <div class="bg-slate-900/40 border border-slate-800 p-8 rounded-[3rem] text-center flex flex-col justify-center shadow-xl relative overflow-hidden group">
+        <h3 class="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] mb-4">Movement Duration (ms)</h3>
         
-        <div class="relative group">
+        <form phx-change="update_duration" onsubmit="return false">
           <input type="number" 
+                 name="value" 
                  value={@duration} 
-                 min="1000" 
                  step="100"
-                 phx-change="update_duration" 
-                 phx-debounce="500"
-                 phx-keydown="execute_move" 
-                 phx-key="Enter"
+                 phx-debounce="500" 
+                 onblur="if(this.value < 1000) this.value = 1000;"
                  class={"w-full bg-slate-950 border rounded-2xl p-5 text-center font-mono text-3xl outline-none transition-all placeholder:text-slate-800 " <> (if @editing_id, do: "border-amber-500/50 text-amber-400 focus:ring-4 focus:ring-amber-500/10", else: "border-slate-800 text-emerald-400 focus:ring-4 focus:ring-emerald-500/10")} />
-          
-          <span class="absolute right-6 top-1/2 -translate-y-1/2 text-slate-600 font-bold text-xs uppercase tracking-wider pointer-events-none">
-            ms
-          </span>
-        </div>
+        </form>
         
         <p class="text-[10px] text-slate-600 text-center font-bold uppercase mt-4 tracking-widest">
           Minimum 1000ms

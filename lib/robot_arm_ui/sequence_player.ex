@@ -10,7 +10,8 @@ defmodule RobotArmUi.SequencePlayer do
       |> Repo.preload([movements: from(m in RobotArmUi.Movement, order_by: m.inserted_at)])
 
     Enum.each(sequence.movements, fn movement ->
-      duration_sec = (movement.delay_ms || 1500) / 1000.0
+      duration_ms = movement.delay_ms || 1500
+      duration_sec = (duration_ms) / 1000.0
       pose = %{
         "duration" => duration_sec,
         "joints" => %{

@@ -31,6 +31,7 @@ alias RobotArmUi.SequencePlayer
   end
 
   def handle_event("connect_to_arm", %{"ip" => ip}, socket) do
+    Process.send_after(self(), :clear_flash, 5000)
     if String.downcase(ip) == "admin" do
       {:noreply,
         socket
@@ -61,22 +62,17 @@ alias RobotArmUi.SequencePlayer
 
   def handle_event("move", params, socket) do
     joint = params["joint"]
-
-    # 2. Identify which input changed (slider_input vs number_input)
     target = params["_target"] || []
 
-    # 3. Extract the correct value based on what was touched
     raw_value =
       cond do
         "slider_input" in target -> params["slider_input"]
         "number_input" in target -> params["number_input"]
-        true                     -> params["slider_input"] # Fallback
+        true                     -> params["slider_input"]
       end
 
-    # Debug Log: You should now see {"base", "97"} instead of {nil, "97"}
-    IO.inspect({joint, raw_value}, label: ">>> JOINT UPDATE")
+    IO.inspect(raw_value, label: ">>> INPUT RECEIVED")
 
-    # 4. Parse and Save
     parsed_num =
       case Float.parse(to_string(raw_value)) do
         {num, _} -> num
@@ -84,30 +80,37 @@ alias RobotArmUi.SequencePlayer
       end
 
     safe_val = clamp_joint(joint, parsed_num)
-    new_joints = Map.put(socket.assigns.joints, joint, safe_val)
 
+    IO.inspect(safe_val, label: ">>> SAFETY CLAMPED TO")
+
+    new_joints = Map.put(socket.assigns.joints, joint, safe_val)
     {:noreply, assign(socket, joints: new_joints)}
   end
 
   def handle_event("execute_move", _params, socket) do
     if socket.assigns.arm_pid do
-      payload = %{"duration" => socket.assigns.duration / 1000.0, "joints" => socket.assigns.joints}
+      # Convert Milliseconds (4500) -> Seconds (4.5)
+      payload = %{
+        "duration" => socket.assigns.duration / 1000.0,
+        "joints" => socket.assigns.joints
+      }
+      Process.send_after(self(), :clear_flash, 5000)
       PiClient.send_frame(socket.assigns.arm_pid, Jason.encode!(payload))
-      Process.send_after(self(), :clear_flash, 3000)
       {:noreply, put_flash(socket, :info, "Movement Executed")}
     else
-      Process.send_after(self(), :clear_flash, 3000)
       {:noreply, put_flash(socket, :error, "Not connected to Robot Arm")}
     end
-
   end
 
-  def handle_event("update_duration", %{"value" => value}, socket) do
-    safe_duration = case Integer.parse(value) do
-      {num, _} ->
-        max(num, 1000)
+  def handle_event("update_duration", params, socket) do
+    IO.inspect(params, label: ">>> DURATION EVENT")
 
+    raw_val = params["value"]
+
+    safe_duration = case Integer.parse(to_string(raw_val)) do
+      {num, _} -> max(num, 1000)
       :error ->
+        IO.puts(">>> ERROR PARSING DURATION")
         socket.assigns.duration
     end
 
@@ -205,10 +208,8 @@ alias RobotArmUi.SequencePlayer
 
   def handle_event("confirm_update_sequence", _params, socket) do
     if socket.assigns.editing_id do
-      # Fetch the original struct
       original_sequence = Control.get_sequence!(socket.assigns.editing_id)
 
-      # Prepare the NEW data from current sliders
       current_joints = socket.assigns.joints
       duration_ms = socket.assigns.duration || 1500
 
@@ -278,8 +279,8 @@ alias RobotArmUi.SequencePlayer
   end
 
   defp clamp_joint("gripper", angle), do: min(max(angle, 70.0), 130.0)
-  defp clamp_joint("wrist_rotation", angle), do: min(max(angle, 10.0), 170.0)
-  defp clamp_joint("wrist", angle), do: min(max(angle, 0.0), 180.0)
+  defp clamp_joint("wrist_rotation", angle), do: min(max(angle, 0.0), 180.0)
+  defp clamp_joint("wrist", angle), do: min(max(angle, 10.0), 170.0)
   defp clamp_joint("elbow", angle), do: min(max(angle, 10.0), 170.0)
   defp clamp_joint("shoulder", angle), do: min(max(angle, 20.0), 160.0)
   defp clamp_joint("base", angle), do: min(max(angle, 0.0), 180.0)
