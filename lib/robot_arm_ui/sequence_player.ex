@@ -10,8 +10,9 @@ defmodule RobotArmUi.SequencePlayer do
       |> Repo.preload([movements: from(m in RobotArmUi.Movement, order_by: m.inserted_at)])
 
     Enum.each(sequence.movements, fn movement ->
+      duration_sec = (movement.delay_ms || 1500) / 1000.0
       pose = %{
-        "duration" => movement.duration || 1.5,
+        "duration" => duration_sec,
         "joints" => %{
           "base" => movement.joint6,
           "shoulder" => movement.joint5,
@@ -23,7 +24,7 @@ defmodule RobotArmUi.SequencePlayer do
       }
       if arm_pid, do: PiClient.send_frame(arm_pid, Jason.encode!(pose))
 
-      delay = movement.delay_ms || 2000
+      delay = movement.delay_ms || 1500
       Process.sleep(delay)
     end)
   end

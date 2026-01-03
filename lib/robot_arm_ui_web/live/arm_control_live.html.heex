@@ -1,11 +1,13 @@
 <div class="min-h-screen bg-slate-950 text-slate-200 p-6 lg:p-10 font-sans selection:bg-emerald-500/30">
   
-  <%!-- LOGIC BRANCH: CONNECTED VS DISCONNECTED --%>
+  <%!-- =========================================================================
+        LOGIC BRANCH: CONNECTED VS DISCONNECTED
+        ========================================================================= --%>
   <%= if @connected_ip do %>
   
     <%!-- HEADER: Status & Main Actions --%>
     <header class="mb-8 flex flex-col md:flex-row justify-between items-center bg-slate-900/80 p-6 rounded-[2.5rem] border border-slate-800 backdrop-blur-md shadow-2xl gap-4">
-      <div class="flex flex-col md:flex-row items-center gap-6">
+      <div class="flex flex-col md:flex-row items-center gap-6 w-full md:w-auto">
         
         <%!-- Status Indicator --%>
         <div class="flex items-center gap-3 bg-slate-950 px-5 py-3 rounded-full border border-slate-800 shadow-inner">
@@ -15,11 +17,33 @@
           </span>
         </div>
         
-        <%!-- EXECUTE BUTTON --%>
-        <button phx-click="execute_move" 
-                class="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-3 rounded-2xl font-black text-xs tracking-[0.2em] shadow-lg shadow-emerald-900/40 active:scale-95 transition-all uppercase border border-emerald-500/50">
-          Execute Command
-        </button>
+        <%!-- BUTTON SWAP LOGIC: Execute vs Edit --%>
+        <%= if @editing_id do %>
+          <div class="flex items-center gap-4 animate-in fade-in slide-in-from-left-4 duration-300">
+             <%!-- UPDATE BUTTON (Shows when editing) --%>
+             <button phx-click="confirm_update_sequence"
+                     data-confirm="Are you sure you want to overwrite this sequence?"
+                     class="bg-amber-500 hover:bg-amber-400 text-slate-900 px-10 py-3 rounded-2xl font-black text-xs tracking-[0.2em] shadow-lg shadow-amber-900/20 active:scale-95 transition-all uppercase border border-amber-400/50 flex items-center gap-2">
+               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                 <path d="M17.414 2.586a2 2 0 00-2.828 0L7 9.293V12h2.707l7.707-7.707a2 2 0 000-2.828zM5 12V7H5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-5H9a2 2 0 01-2-2z" />
+               </svg>
+               Update Sequence
+             </button>
+             
+             <%!-- CANCEL BUTTON --%>
+             <button phx-click="cancel_edit"
+                     class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-6 py-3 rounded-2xl font-bold text-xs tracking-widest transition-all uppercase border border-slate-700">
+               Cancel
+             </button>
+          </div>
+        <% else %>
+          <%!-- EXECUTE BUTTON (Normal Mode) --%>
+          <button phx-click="execute_move" 
+                  class="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-3 rounded-2xl font-black text-xs tracking-[0.2em] shadow-lg shadow-emerald-900/40 active:scale-95 transition-all uppercase border border-emerald-500/50">
+            Execute Command
+          </button>
+        <% end %>
+
       </div>
 
       <button phx-click="reset_session" 
@@ -28,40 +52,55 @@
       </button>
     </header>
 
-    <%!-- MAIN GRID: Joint Controls (Responsive Columns) --%>
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
+    <%!-- MAIN GRID: Joint Controls --%>
+    <div class={"grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8 transition-opacity duration-300 " <> (if @editing_id, do: "ring-4 ring-amber-500/20 rounded-[3rem] p-4 bg-amber-500/5", else: "")}>
       
       <%= for {name, key, min, max} <- [
           {"Base", "base", 0, 180},
           {"Shoulder", "shoulder", 20, 160},
           {"Elbow", "elbow", 10, 170},
           {"Wrist", "wrist", 0, 180},
-          {"Wrist Rotate", "wrist_rotation", 0, 180},
+          {"Rotate", "wrist_rotation", 0, 180},
           {"Gripper", "gripper", 70, 130}
         ] do %>
         
-        <div class="bg-slate-900/40 border border-slate-800 p-6 rounded-[3rem] flex flex-col items-center gap-6 shadow-xl hover:border-emerald-500/30 transition-all group">
+        <%!-- 
+            CRITICAL FIX: 
+            1. phx-change="move" is now on the FORM.
+            2. phx-value-joint={key} is now on the FORM.
+            This guarantees 'joint' and 'value' are always sent together.
+        --%>
+        <form phx-change="move" phx-value-joint={key} onsubmit="return false" class="bg-slate-900/40 border border-slate-800 p-6 rounded-[3rem] flex flex-col items-center gap-6 shadow-xl hover:border-emerald-500/30 transition-all group">
           <h3 class="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] group-hover:text-emerald-400 transition-colors"><%= name %></h3>
           
-          <div class="h-64 w-4 bg-slate-950 rounded-full relative border border-slate-800 flex justify-center shadow-inner overflow-hidden">
-            <input type="range" min={min} max={max} step="1" value={@joints[key]} 
-                   phx-change="move" phx-value-joint={key} 
+          <div class="h-64 w-12 bg-slate-950 rounded-full relative border border-slate-800 flex justify-center shadow-inner overflow-hidden">
+            <%!-- Slider: distinct name --%>
+            <input type="range" 
+                   name="slider_input"
+                   min={min} max={max} step="1" 
+                   value={@joints[key]} 
+                   phx-throttle="100"
                    style="writing-mode: bt-lr; -webkit-appearance: slider-vertical;" 
-                   class="h-full w-full absolute opacity-80 cursor-pointer accent-emerald-500 mix-blend-screen" />
+                   class={"h-full w-full absolute cursor-pointer opacity-80 " <> (if @editing_id, do: "accent-amber-500", else: "accent-emerald-500")} />
           </div>
 
-          <input type="number" value={@joints[key]} phx-change="move" phx-value-joint={key} phx-debounce="500"
-                 class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3 text-center font-mono text-xl text-emerald-400 outline-none focus:border-emerald-500 transition-colors" />
-        </div>
+          <%!-- Number Box: distinct name --%>
+          <input type="number" 
+                 name="number_input"
+                 value={@joints[key]} 
+                 min={min} max={max}
+                 phx-debounce="500"
+                 class={"w-full bg-slate-950 border rounded-2xl p-3 text-center font-mono text-xl outline-none focus:border-opacity-100 transition-colors " <> (if @editing_id, do: "border-amber-500/50 text-amber-400 focus:border-amber-500", else: "border-slate-800 text-emerald-400 focus:border-emerald-500")} />
+        </form>
       <% end %>
 
     </div>
 
-    <%!-- LOWER PANEL: Responsive Grid --%>
+    <%!-- LOWER PANEL --%>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
       <%!-- LEFT COL: SPEED CONTROL --%>
-      <div class="bg-slate-900/40 border border-slate-800 p-8 rounded-[2.5rem] flex flex-col justify-center h-full">
+      <div class={"bg-slate-900/40 border p-8 rounded-[2.5rem] flex flex-col justify-center h-full " <> (if @editing_id, do: "border-amber-500/30", else: "border-slate-800")}>
         <h3 class="text-xs font-bold uppercase text-slate-500 tracking-widest mb-4">Movement Duration</h3>
         
         <div class="relative group">
@@ -73,7 +112,7 @@
                  phx-debounce="500"
                  phx-keydown="execute_move" 
                  phx-key="Enter"
-                 class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 text-center font-mono text-3xl text-emerald-400 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:text-slate-800 group-hover:border-emerald-500/30" />
+                 class={"w-full bg-slate-950 border rounded-2xl p-5 text-center font-mono text-3xl outline-none transition-all placeholder:text-slate-800 " <> (if @editing_id, do: "border-amber-500/50 text-amber-400 focus:ring-4 focus:ring-amber-500/10", else: "border-slate-800 text-emerald-400 focus:ring-4 focus:ring-emerald-500/10")} />
           
           <span class="absolute right-6 top-1/2 -translate-y-1/2 text-slate-600 font-bold text-xs uppercase tracking-wider pointer-events-none">
             ms
@@ -95,37 +134,51 @@
             </svg>
             Saved Sequences
           </h3>
-          <button phx-click="open_save_modal" 
-                  class="text-[10px] bg-emerald-900/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 px-6 py-3 rounded-xl font-bold uppercase transition-all tracking-wider shadow-lg shadow-emerald-900/10 w-full sm:w-auto">
+          <%!-- SAVE BUTTON (Disabled in Edit Mode) --%>
+          <button phx-click="open_save_modal" disabled={@editing_id != nil}
+                  class={"text-[10px] bg-emerald-900/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 px-6 py-3 rounded-xl font-bold uppercase transition-all tracking-wider shadow-lg shadow-emerald-900/10 w-full sm:w-auto " <> (if @editing_id, do: "opacity-50 cursor-not-allowed", else: "")}>
             + Save Current
           </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar z-10 relative flex-grow">
-          <%= for seq <- @sequences do %>
-            <div class="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex justify-between items-center group hover:border-emerald-500/50 transition-all shadow-md">
-              <span class="font-bold text-slate-300 text-sm truncate pr-4"><%= seq.name %></span>
-              <div class="flex gap-2 shrink-0">
-                <%!-- Play Button --%>
-                <button phx-click="load_sequence" phx-value-id={seq.id} title="Run Sequence"
-                        class="bg-emerald-900/30 text-emerald-400 p-2 rounded-lg hover:bg-emerald-500 hover:text-white transition-colors border border-emerald-500/20">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
-                  </svg>
-                </button>
-                <%!-- Delete Button --%>
-                <button phx-click="delete_sequence" phx-value-id={seq.id} title="Delete" data-confirm="Are you sure?"
-                        class="bg-rose-900/20 text-rose-500 p-2 rounded-lg hover:bg-rose-600 hover:text-white transition-colors border border-rose-500/20">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                  </svg>
-                </button>
+        <%!-- SCROLLABLE CONTAINER --%>
+        <div class="h-[300px] overflow-y-auto pr-2 custom-scrollbar z-10 relative">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <%= for seq <- @sequences do %>
+              <div class={"bg-slate-950 border p-4 rounded-2xl flex justify-between items-center group transition-all shadow-md " <> (if @editing_id == seq.id, do: "border-amber-500/80 ring-2 ring-amber-500/20", else: "border-slate-800 hover:border-emerald-500/50")}>
+                <span class={"font-bold text-sm truncate pr-4 " <> (if @editing_id == seq.id, do: "text-amber-400", else: "text-slate-300")}><%= seq.name %></span>
+                
+                <div class="flex gap-2 shrink-0">
+                  
+                  <%!-- PLAY BUTTON --%>
+                  <button phx-click="load_sequence" phx-value-id={seq.id} disabled={@editing_id != nil}
+                          class="bg-emerald-900/30 text-emerald-400 p-2 rounded-lg hover:bg-emerald-500 hover:text-white transition-colors border border-emerald-500/20 disabled:opacity-30 disabled:cursor-not-allowed">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                  
+                  <%!-- EDIT BUTTON --%>
+                  <button phx-click="edit_sequence" phx-value-id={seq.id} disabled={@editing_id != nil}
+                          class="bg-amber-900/30 text-amber-500 p-2 rounded-lg hover:bg-amber-500 hover:text-white transition-colors border border-amber-500/20 disabled:opacity-30 disabled:cursor-not-allowed">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                       <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                     </svg>
+                  </button>
+
+                  <%!-- DELETE BUTTON --%>
+                  <button phx-click="delete_sequence" phx-value-id={seq.id} data-confirm="Are you sure?" disabled={@editing_id != nil}
+                          class="bg-rose-900/20 text-rose-500 p-2 rounded-lg hover:bg-rose-600 hover:text-white transition-colors border border-rose-500/20 disabled:opacity-30 disabled:cursor-not-allowed">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
               </div>
-            </div>
-          <% end %>
-          
+            <% end %>
+          </div>
           <%= if Enum.empty?(@sequences) do %>
-             <div class="col-span-full h-full flex items-center justify-center py-10 text-slate-600 text-xs uppercase tracking-widest border border-dashed border-slate-800 rounded-2xl">
+             <div class="h-full flex items-center justify-center text-slate-600 text-xs uppercase tracking-widest border border-dashed border-slate-800 rounded-2xl">
                No sequences saved yet
              </div>
           <% end %>
@@ -138,18 +191,14 @@
     <%!-- NOT CONNECTED SCREEN --%>
     <div class="flex items-center justify-center min-h-[80vh]">
       <form phx-submit="connect_to_arm" class="bg-slate-900 p-12 rounded-[4rem] border border-slate-800 shadow-2xl w-full max-w-md space-y-8 text-center relative overflow-hidden group">
-        
         <div class="absolute inset-0 bg-gradient-to-b from-emerald-500/5 to-transparent pointer-events-none"></div>
-        
         <div class="relative z-10 space-y-8">
           <div>
             <h1 class="text-4xl font-black italic uppercase tracking-tighter text-white mb-2">Initialize Link</h1>
             <p class="text-slate-500 text-xs font-bold uppercase tracking-[0.2em]">Remote Manipulator System</p>
           </div>
-          
           <input type="text" name="ip" placeholder="192.168.X.X" autocomplete="off" value={@ip_input} phx-keyup="update_ip_input"
                  class="w-full bg-slate-950 border border-slate-700 rounded-2xl p-5 text-center text-2xl font-mono text-emerald-400 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:text-slate-800" />
-          
           <button type="submit" class="w-full bg-emerald-600 py-5 rounded-2xl font-black tracking-widest hover:bg-emerald-500 transition-all active:scale-95 shadow-lg shadow-emerald-900/20 text-white uppercase text-sm">
             Establish Connection
           </button>
@@ -162,12 +211,9 @@
   <%= if @show_save_modal do %>
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6 animate-in fade-in duration-200">
       <div class="bg-slate-900 border border-slate-700 p-8 rounded-[2.5rem] w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200">
-        
         <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-600 to-teal-400"></div>
-
         <h2 class="text-2xl font-black uppercase text-white mb-1 tracking-tight">Save Sequence</h2>
         <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-8">Store current joint positions</p>
-        
         <form phx-submit="confirm_save">
           <div class="space-y-6">
             <div>
@@ -175,7 +221,6 @@
               <input type="text" name="name" placeholder="e.g. Pick Object A" required autofocus
                      class="w-full bg-slate-950 border border-slate-700 rounded-2xl p-4 text-emerald-400 font-bold outline-none focus:border-emerald-500 transition-colors placeholder:text-slate-800" />
             </div>
-            
             <div class="flex gap-4 pt-2">
               <button type="button" phx-click="close_save_modal" 
                       class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white py-4 rounded-2xl font-bold uppercase text-xs tracking-widest transition-all">

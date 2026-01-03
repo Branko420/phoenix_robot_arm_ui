@@ -59,29 +59,44 @@ alias RobotArmUi.SequencePlayer
     {:noreply, assign(socket, connected_ip: nil, is_admin: false, arm_pid: nil, ip_input: "")}
   end
 
-  def handle_event("move", %{"joint" => joint, "value" => value}, socket) do
+  def handle_event("move", params, socket) do
+    joint = params["joint"]
+
+    # 2. Identify which input changed (slider_input vs number_input)
+    target = params["_target"] || []
+
+    # 3. Extract the correct value based on what was touched
+    raw_value =
+      cond do
+        "slider_input" in target -> params["slider_input"]
+        "number_input" in target -> params["number_input"]
+        true                     -> params["slider_input"] # Fallback
+      end
+
+    # Debug Log: You should now see {"base", "97"} instead of {nil, "97"}
+    IO.inspect({joint, raw_value}, label: ">>> JOINT UPDATE")
+
+    # 4. Parse and Save
     parsed_num =
-    case Float.parse(to_string(value)) do
-      {num, _} -> num
-      :error -> socket.assigns.joints[joint]
-    end
+      case Float.parse(to_string(raw_value)) do
+        {num, _} -> num
+        :error -> socket.assigns.joints[joint]
+      end
 
-  # 2. APPLY THE CLAMP (This was missing)
-  safe_val = clamp_joint(joint, parsed_num)
+    safe_val = clamp_joint(joint, parsed_num)
+    new_joints = Map.put(socket.assigns.joints, joint, safe_val)
 
-  # 3. Update State
-  new_joints = Map.put(socket.assigns.joints, joint, safe_val)
-  socket = clear_flash(socket)
-
-  {:noreply, assign(socket, joints: new_joints)}
+    {:noreply, assign(socket, joints: new_joints)}
   end
 
   def handle_event("execute_move", _params, socket) do
     if socket.assigns.arm_pid do
       payload = %{"duration" => socket.assigns.duration / 1000.0, "joints" => socket.assigns.joints}
       PiClient.send_frame(socket.assigns.arm_pid, Jason.encode!(payload))
+      Process.send_after(self(), :clear_flash, 3000)
       {:noreply, put_flash(socket, :info, "Movement Executed")}
     else
+      Process.send_after(self(), :clear_flash, 3000)
       {:noreply, put_flash(socket, :error, "Not connected to Robot Arm")}
     end
 
@@ -108,33 +123,146 @@ alias RobotArmUi.SequencePlayer
   end
 
   def handle_event("confirm_save", %{"name" => name}, socket) do
-    case Control.create_sequence(name) do
+    current_joints = socket.assigns.joints
+    duration_ms = socket.assigns.duration
+
+    movement_attrs = %{
+      "joint1" => current_joints["gripper"],
+      "joint2" => current_joints["wrist_rotation"],
+      "joint3" => current_joints["wrist"],
+      "joint4" => current_joints["elbow"],
+      "joint5" => current_joints["shoulder"],
+      "joint6" => current_joints["base"],
+      "delay_ms" => duration_ms
+    }
+
+    sequence_attrs = %{"name" => name, "movements" => [movement_attrs]}
+
+    case Control.create_sequence(sequence_attrs) do
       {:ok, _sequence} ->
+
+        Process.send_after(self(), :clear_flash, 5000)
         {:noreply,
           socket
-          |> assign(show_save_modal: false, sequences: Control.list_sequences())
-          |> put_flash(:info, "Sequence saved.")
+          |> assign(show_save_modal: false)
+          |> assign(sequences: Control.list_sequences())
+          |> put_flash(:info, "Sequence saved successfully.")
         }
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Save Failed.")}
+        {:error, _changeset} ->
+          Process.send_after(self(), :clear_flash, 3000)
+          {:noreply, put_flash(socket, :error, "Failed to save sequence.")}
     end
   end
 
   def handle_event("delete_sequence", %{"id" => id} = _params, socket) do
     Control.delete_sequence(id)
 
-    new_socket =
+    Process.send_after(self(), :clear_flash, 5000)
+
+    {:noreply,
       socket
       |> assign(sequences: Control.list_sequences())
-      |> put_flash(:info, "Sequence deleted.")
-    {:noreply, new_socket}
+      |> put_flash(:info, "Sequence deleted.")}
+  end
+
+  def handle_event("edit_sequence", %{"id" => id}, socket) do
+    sequence = Control.get_sequence!(String.to_integer(id))
+
+    movement = List.first(sequence.movements)
+
+    Process.send_after(self(), :clear_flash, 5000)
+    if movement do
+      loaded_joints = %{
+        "base"           => movement.joint6,
+        "shoulder"       => movement.joint5,
+        "elbow"          => movement.joint4,
+        "wrist"          => movement.joint3,
+        "wrist_rotation" => movement.joint2,
+        "gripper"        => movement.joint1
+      }
+
+      {:noreply,
+        socket
+        |> assign(joints: loaded_joints)
+        |> assign(duration: movement.delay_ms || 1500)
+        |> assign(editing_id: sequence.id, editing_name: sequence.name)
+        |> put_flash(:info, "Editing '#{sequence.name}'. Adjust sliders and click Update.")
+      }
+    else
+      {:noreply, put_flash(socket, :error, "Sequence has no movements.")}
+    end
+  end
+
+  def handle_event("cancel_edit", _params, socket) do
+    Process.send_after(self(), :clear_flash, 3000)
+    {:noreply,
+      socket
+      |> assign(editing_id: nil)
+      |> assign(editing_name: nil)
+      |> put_flash(:info, "Edit cancelled.")
+    }
+  end
+
+  def handle_event("confirm_update_sequence", _params, socket) do
+    if socket.assigns.editing_id do
+      # Fetch the original struct
+      original_sequence = Control.get_sequence!(socket.assigns.editing_id)
+
+      # Prepare the NEW data from current sliders
+      current_joints = socket.assigns.joints
+      duration_ms = socket.assigns.duration || 1500
+
+      movement_attrs = %{
+        "joint1" => current_joints["gripper"],
+        "joint2" => current_joints["wrist_rotation"],
+        "joint3" => current_joints["wrist"],
+        "joint4" => current_joints["elbow"],
+        "joint5" => current_joints["shoulder"],
+        "joint6" => current_joints["base"],
+        "delay_ms" => duration_ms
+      }
+
+      # We keep the original name, but update the movements
+      attrs = %{
+        "name" => socket.assigns.editing_name,
+        "movements" => [movement_attrs]
+      }
+      Process.send_after(self(), :clear_flash, 3000)
+      case Control.update_sequence(original_sequence, attrs) do
+        {:ok, _updated} ->
+          Process.send_after(self(), :clear_flash, 5000)
+          {:noreply,
+            socket
+            |> assign(editing_id: nil) # Exit edit mode
+            |> assign(editing_name: nil)
+            |> assign(sequences: Control.list_sequences()) # Refresh list
+            |> put_flash(:info, "Sequence updated successfully.")
+          }
+
+        {:error, _} ->
+          Process.send_after(self(), :clear_flash, 5000)
+          {:noreply, put_flash(socket, :error, "Failed to update sequence.")}
+      end
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("load_sequence", %{"id" => id}, socket) do
-    Task.start(fn ->
-      SequencePlayer. play_sequence(String.to_integer(id), socket.assigns.arm_pid)
-    end)
-    {:noreply, socket}
+    seq_id = String.to_integer(id)
+    pid = socket.assigns.arm_pid
+
+    Process.send_after(self(), :clear_flash, 5000)
+    if pid do
+      # Run the sequence in a separate process so the UI doesn't freeze
+      Task.start(fn ->
+        SequencePlayer.play_sequence(seq_id, pid)
+      end)
+
+      {:noreply, put_flash(socket, :info, "Sequence started...")}
+    else
+      {:noreply, put_flash(socket, :error, "Not connected to Robot Arm")}
+    end
   end
 
   def handle_event("move_on_enter", %{"key" => "Enter", "joint" => joint, "value" => value}, socket) do
@@ -145,6 +273,10 @@ alias RobotArmUi.SequencePlayer
     {:noreply, socket}
   end
 
+  def handle_info(:clear_flash, socket) do
+    {:noreply, clear_flash(socket)}
+  end
+
   defp clamp_joint("gripper", angle), do: min(max(angle, 70.0), 130.0)
   defp clamp_joint("wrist_rotation", angle), do: min(max(angle, 10.0), 170.0)
   defp clamp_joint("wrist", angle), do: min(max(angle, 0.0), 180.0)
@@ -152,15 +284,4 @@ alias RobotArmUi.SequencePlayer
   defp clamp_joint("shoulder", angle), do: min(max(angle, 20.0), 160.0)
   defp clamp_joint("base", angle), do: min(max(angle, 0.0), 180.0)
   defp clamp_joint(_, angle), do: angle
-  defp get_limits(joint) do
-  case joint do
-    "gripper" -> {70.0, 130.0}
-    "wrist_rotation" -> {10.0, 170.0}
-    "elbow" -> {10.0, 170.0}
-    "shoulder" -> {20.0, 160.0}
-    "wrist" -> {0.0, 180.0}
-    "base" -> {0.0, 180.0}
-    _ -> {0.0, 180.0}
-  end
-end
 end

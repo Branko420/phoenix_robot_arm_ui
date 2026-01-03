@@ -4,7 +4,7 @@ defmodule RobotArmUi.Sequence do
 
   schema "sequences" do
     field :name, :string
-    has_many :movements, RobotArmUi.Movement
+    has_many :movements, RobotArmUi.Movement,on_replace: :delete, on_delete: :delete_all
 
     timestamps(type: :utc_datetime)
   end
@@ -14,5 +14,7 @@ defmodule RobotArmUi.Sequence do
     sequence
     |> cast(attrs, [:name])
     |> validate_required([:name])
+    |> unique_constraint(:name)
+    |> cast_assoc(:movements, with: &RobotArmUi.Movement.changeset/2)
   end
 end
