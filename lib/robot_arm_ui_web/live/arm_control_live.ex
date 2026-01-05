@@ -60,6 +60,10 @@ alias RobotArmUi.SequencePlayer
     {:noreply, assign(socket, connected_ip: nil, is_admin: false, arm_pid: nil, ip_input: "")}
   end
 
+  def handle_event("ignore_enter", _params, socket) do
+    {:noreply, socket}
+  end
+
   def handle_event("move", params, socket) do
     joint = params["joint"]
     target = params["_target"] || []
@@ -88,13 +92,14 @@ alias RobotArmUi.SequencePlayer
   end
 
   def handle_event("execute_move", _params, socket) do
+    Process.send_after(self(), :clear_flash, 5000)
     if socket.assigns.arm_pid do
       # Convert Milliseconds (4500) -> Seconds (4.5)
       payload = %{
         "duration" => socket.assigns.duration / 1000.0,
         "joints" => socket.assigns.joints
       }
-      Process.send_after(self(), :clear_flash, 5000)
+
       PiClient.send_frame(socket.assigns.arm_pid, Jason.encode!(payload))
       {:noreply, put_flash(socket, :info, "Movement Executed")}
     else
@@ -149,11 +154,11 @@ alias RobotArmUi.SequencePlayer
           socket
           |> assign(show_save_modal: false)
           |> assign(sequences: Control.list_sequences())
-          |> put_flash(:info, "Sequence saved successfully.")
+          |> put_flash(:info, "Pose saved successfully.")
         }
         {:error, _changeset} ->
           Process.send_after(self(), :clear_flash, 3000)
-          {:noreply, put_flash(socket, :error, "Failed to save sequence.")}
+          {:noreply, put_flash(socket, :error, "Failed to save pose.")}
     end
   end
 
@@ -165,7 +170,7 @@ alias RobotArmUi.SequencePlayer
     {:noreply,
       socket
       |> assign(sequences: Control.list_sequences())
-      |> put_flash(:info, "Sequence deleted.")}
+      |> put_flash(:info, "Pose deleted.")}
   end
 
   def handle_event("edit_sequence", %{"id" => id}, socket) do
@@ -192,7 +197,7 @@ alias RobotArmUi.SequencePlayer
         |> put_flash(:info, "Editing '#{sequence.name}'. Adjust sliders and click Update.")
       }
     else
-      {:noreply, put_flash(socket, :error, "Sequence has no movements.")}
+      {:noreply, put_flash(socket, :error, "Pose has no movements.")}
     end
   end
 
@@ -237,12 +242,12 @@ alias RobotArmUi.SequencePlayer
             |> assign(editing_id: nil) # Exit edit mode
             |> assign(editing_name: nil)
             |> assign(sequences: Control.list_sequences()) # Refresh list
-            |> put_flash(:info, "Sequence updated successfully.")
+            |> put_flash(:info, "Pose updated successfully.")
           }
 
         {:error, _} ->
           Process.send_after(self(), :clear_flash, 5000)
-          {:noreply, put_flash(socket, :error, "Failed to update sequence.")}
+          {:noreply, put_flash(socket, :error, "Failed to update pose.")}
       end
     else
       {:noreply, socket}
@@ -260,7 +265,7 @@ alias RobotArmUi.SequencePlayer
         SequencePlayer.play_sequence(seq_id, pid)
       end)
 
-      {:noreply, put_flash(socket, :info, "Sequence started...")}
+      {:noreply, put_flash(socket, :info, "Pose started...")}
     else
       {:noreply, put_flash(socket, :error, "Not connected to Robot Arm")}
     end

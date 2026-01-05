@@ -27,6 +27,7 @@ defmodule RobotArmUi.Control do
 
   def update_sequence(%Sequence{} = sequence, attrs) do
     sequence
+    |> Repo.preload(:movements)
     |> Sequence.changeset(attrs)
     |> Repo.update()
   end
